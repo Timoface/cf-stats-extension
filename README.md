@@ -1,5 +1,8 @@
 # CF Stats+ — статистика Codeforces и AtCoder в профиле
 
+[![CI](https://github.com/Timoface/cf-stats-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Timoface/cf-stats-extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Timoface/cf-stats-extension?label=release)](https://github.com/Timoface/cf-stats-extension/releases/latest)
+
 Расширение для Chrome и Firefox (Manifest V3), которое собирает **все** решённые задачи
 пользователя Codeforces — включая gym, тренировки, сборы и виртуальные контесты — и
 сопоставляет их с двумя архивами:
