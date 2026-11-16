@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E2E Codeforces profile</title>
+  <link rel="icon" href="data:,">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f0f0f0; font-family: Verdana, Arial, sans-serif; color: #222; font-size: 13px; }
+    .top { background: #2f5f9e; color: #fff; padding: 10px 18px; font-weight: 700; }
+    .wrap { max-width: 1100px; margin: 18px auto 40px; padding: 0 16px; }
+    #pageContent { background: #fff; border: 1px solid #d8d8d8; border-radius: 4px; padding: 18px 20px 26px; }
+    .crumbs { color: #777; font-size: 11px; margin-bottom: 12px; }
+    .userbox { display: flex; gap: 16px; padding: 4px 0 18px; border-bottom: 1px solid #e1e1e1; }
+    .avatar { width: 88px; height: 88px; border: 1px solid #ccd; border-radius: 6px; display: flex; align-items: center; justify-content: center; font: 700 30px Georgia, serif; color: #7183a0; background: #e9eef6; }
+    .info h1 { margin: 0; font-size: 23px; color: #2b4b77; }
+    .rank { color: #d33; font-size: 13px; margin-left: 8px; }
+    .meta { margin-top: 7px; color: #555; font-size: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+    .meta b { color: #222; }
+    .tabs { display: flex; gap: 2px; margin-top: 16px; border-bottom: 1px solid #ccc; }
+    .tabs a { padding: 6px 12px; background: #f1f1f1; border: 1px solid #d5d5d5; border-bottom: 0; border-radius: 4px 4px 0 0; font-size: 11px; color: #555; text-decoration: none; }
+    .tabs a.active { background: #fff; color: #222; font-weight: 600; }
+    .roundbox { margin-top: 18px; border: 1px solid #ddd; border-radius: 4px; padding: 12px 15px; background: #fbfbfb; color: #555; font-size: 12px; }
+    #e2e-status { margin-top: 10px; color: #888; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="top">Codeforces</div>
+  <div class="wrap">
+    <div class="crumbs">Home → Profile → <span id="handle-crumb">tourist</span></div>
+    <div id="pageContent">
+      <div class="userbox">
+        <div class="avatar">T</div>
+        <div class="info">
+          <h1>tourist <span class="rank">International Grandmaster</span></h1>
+          <div class="meta"><span>Rating: <b>3970</b></span><span>Max: <b>3970</b></span><span>Contribution: <b>+100</b></span></div>
+          <div class="meta"><span><a href="#">Friends</a></span><span><a href="#">Blog</a></span><span><a href="#">Teams</a></span></div>
+        </div>
+      </div>
+      <div class="tabs"><a class="active" href="#">Profile</a><a href="#">Blog</a><a href="#">Submissions</a><a href="#">Groups</a></div>
+      <div class="roundbox">E2E stand-in for the Codeforces profile page. The extension content script is injected by the browser.</div>
+      <div id="e2e-status">waiting for extension…</div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var handle = decodeURIComponent((location.pathname.match(/^\/profile\/([^/]+)/) || [])[1] || 'tourist');
+      document.getElementById('handle-crumb').textContent = handle;
+      document.title = 'E2E profile — ' + handle;
+      var reported = false;
+      var pageErrors = [];
+      window.addEventListener('error', function (event) {
+        pageErrors.push(String(event.message || event.error));
+      });
+      window.addEventListener('unhandledrejection', function (event) {
+        pageErrors.push(String(event.reason && event.reason.message || event.reason));
+      });
+
+      function report(snapshot) {
+        if (reported || !/[?&]report=1/.test(location.search)) return;
+        if (snapshot.state !== 'ready' && snapshot.state !== 'error') return;
+        reported = true;
+        snapshot.pageErrors = pageErrors;
+        try {
+          var body = JSON.stringify(snapshot);
+          fetch('/report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+          }).catch(function () {});
+        } catch (error) {
+          // Reporting is best-effort; the page itself is the test target.
+        }
+      }
+
+      function text(role) {
+        var node = document.querySelector('[data-role="' + role + '"]');
+        return node ? node.textContent.trim() : '';
+      }
+
+      function number(role) {
+        var raw = text(role).replace(/[^\d-]/g, '');
+        return raw ? Number(raw) : 0;
+      }
+
+      function update() {
+        var panel = document.getElementById('cf-stats-plus');
+        var status = document.getElementById('e2e-status');
+        if (!panel) {
+          status.textContent = 'waiting for extension…';
+          return;
+        }
+        document.documentElement.dataset.cfsState = panel.dataset.state || 'unknown';
+        document.documentElement.dataset.cfsHandle = panel.dataset.handle || handle;
+        status.textContent = 'panel state: ' + (panel.dataset.state || 'unknown');
+        window.__e2eSnapshot = {
+          state: panel.dataset.state || 'unknown',
+          handle: panel.dataset.handle || handle,
+          total: number('stat-total'),
+          cf: number('stat-cf'),
+          atcoder: number('stat-atcoder'),
+          training: number('stat-training'),
+          rating: number('stat-rating'),
+          warnings: panel.querySelectorAll('.cfs-warning').length,
+          warningText: Array.prototype.map.call(panel.querySelectorAll('.cfs-warning'), function (n) { return n.textContent.trim(); }),
+          errorVisible: !panel.querySelector('[data-role="error"]').hidden,
+          errorText: text('error-text'),
+          recent: panel.querySelectorAll('.cfs-recent-item').length,
+          legend: panel.querySelectorAll('.cfs-legend-item').length,
+          ratingCanvas: (function () {
+            var c = panel.querySelector('[data-role="rating-canvas"]');
+            return { width: c ? c.width : 0, height: c ? c.height : 0, clientWidth: c ? c.clientWidth : 0 };
+          })(),
+          tagsCanvas: (function () {
+            var c = panel.querySelector('[data-role="tags-canvas"]');
+            return { width: c ? c.width : 0, height: c ? c.height : 0, clientWidth: c ? c.clientWidth : 0 };
+          })(),
+          cacheStatus: text('cache-status'),
+          panelWidth: Math.round(panel.getBoundingClientRect().width),
+          panelHeight: Math.round(panel.getBoundingClientRect().height)
+        };
+        report(window.__e2eSnapshot);
+      }
+
+      setInterval(update, 200);
+      update();
+    })();
+  </script>
+</body>
+</html>

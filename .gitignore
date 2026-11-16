@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output and packages
+dist/
+.web-ext-artifacts/
+*.xpi
+*.crx
+*.pem
+
+# Test artifacts and temporary browser profiles
+tests/.tmp/
+coverage/
+*.log
+npm-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+.vscode/
+*.swp

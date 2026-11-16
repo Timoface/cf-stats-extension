@@ -1,0 +1,80 @@
+{
+  "manifest_version": 3,
+  "name": "CF Stats+ — статистика Codeforces",
+  "short_name": "CF Stats+",
+  "version": "1.0.0",
+  "description": "Статистика Codeforces и AtCoder в профиле: графики сложности и тегов, задачи из тренировок.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "CF Stats+ — настройки",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "scripts": [
+      "src/lib/constants.js",
+      "src/lib/normalize.js",
+      "src/lib/matcher.js",
+      "src/lib/stats.js",
+      "src/lib/storage.js",
+      "src/lib/settings.js",
+      "src/lib/api.js",
+      "src/background.js"
+    ]
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "https://codeforces.com/*",
+    "https://*.codeforces.com/*",
+    "https://kenkoooo.com/*",
+    "https://*.kenkoooo.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://codeforces.com/profile/*",
+        "*://*.codeforces.com/profile/*"
+      ],
+      "js": [
+        "src/lib/constants.js",
+        "src/vendor/chart.umd.min.js",
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "cf-stats-plus@example.com",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  }
+}

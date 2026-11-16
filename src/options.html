@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Настройки — CF Stats+</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <div class="brand">
+        <span class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="12" width="4.2" height="9" rx="1.2" fill="currentColor"/>
+            <rect x="9.9" y="7" width="4.2" height="14" rx="1.2" fill="currentColor" opacity=".92"/>
+            <rect x="16.8" y="3" width="4.2" height="18" rx="1.2" fill="currentColor" opacity=".82"/>
+          </svg>
+        </span>
+        <div>
+          <div class="brand-title-row">
+            <h1>CF Stats+</h1>
+            <span class="badge" id="version-badge">v1.0.0</span>
+          </div>
+          <p class="brand-subtitle">Единая статистика решённых задач по архивам Codeforces и AtCoder</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-primary" type="button" id="save-top">Сохранить</button>
+      </div>
+    </header>
+
+    <p class="lead">
+      Расширение показывает графики прямо в профиле Codeforces. Здесь можно настроить
+      вежливые задержки между запросами, срок жизни кэша и параметры сопоставления задач.
+    </p>
+
+    <div class="notice" id="atcoder-notice">
+      <strong>Как работает AtCoder-сверка.</strong>
+      Задачи, решённые на Codeforces (в том числе в gym/тренировках), дополнительно сверяются
+      с открытым архивом AtCoder Problems по названию. Посылки с самого AtCoder не загружаются.
+    </div>
+
+    <form id="settings-form" autocomplete="off">
+      <section class="card">
+        <div class="card-heading">
+          <h2>Запросы к API</h2>
+          <p>Очередь выполняет запросы строго по одному. Это снижает риск временной блокировки.</p>
+        </div>
+        <div class="fields">
+          <label class="field">
+            <span class="field-label">Задержка между запросами</span>
+            <span class="control">
+              <input id="minRequestDelayMs" name="minRequestDelayMs" type="number" min="1000" max="5000" step="100" inputmode="numeric">
+              <span class="unit">мс</span>
+            </span>
+            <span class="hint">Codeforces рекомендует не чаще одного запроса в 2 секунды. Безопасный диапазон: 2000–3000 мс.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Повторов при ошибке</span>
+            <span class="control">
+              <input id="maxRetries" name="maxRetries" type="number" min="1" max="8" step="1" inputmode="numeric">
+              <span class="unit">раз</span>
+            </span>
+            <span class="hint">Экспоненциальная задержка с джиттером; при 403/429 учитывается Retry-After.</span>
+          </label>
+        </div>
+        <p class="warning-line" id="delay-warning" hidden>
+          Задержка меньше 2000 мс повышает риск получить лимит или Cloudflare-блокировку.
+        </p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading">
+          <h2>Кэш</h2>
+          <p>Архивы меняются редко, история посылок — чаще. Свежие данные подставляются из локального хранилища.</p>
+        </div>
+        <div class="fields">
+          <label class="field">
+            <span class="field-label">Срок жизни архивов</span>
+            <span class="control">
+              <input id="archiveTtlHours" name="archiveTtlHours" type="number" min="1" max="168" step="1" inputmode="numeric">
+              <span class="unit">ч</span>
+            </span>
+            <span class="hint">По умолчанию 24 часа. Для CF и AtCoder применяется один срок.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Срок жизни истории посылок</span>
+            <span class="control">
+              <input id="statusTtlMinutes" name="statusTtlMinutes" type="number" min="5" max="240" step="5" inputmode="numeric">
+              <span class="unit">мин</span>
+            </span>
+            <span class="hint">Обновление профиля в фоне; кнопка «Обновить» на панели игнорирует кэш.</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-heading">
+          <h2>Сопоставление</h2>
+          <p>Задача сначала ищется по официальному contest ID, затем по названию, затем нечётко.</p>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-copy">
+            <span class="field-label">Сверять с архивом AtCoder</span>
+            <span class="hint">Только gym/тренировки, только уникальные выразительные названия. AtCoder-задачи не имеют тегов в архиве.</span>
+          </div>
+          <label class="switch">
+            <input id="atcoderEnabled" name="atcoderEnabled" type="checkbox">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="sr-only">Включить сверку с AtCoder</span>
+          </label>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-copy">
+            <span class="field-label">Нечёткое сопоставление с CF</span>
+            <span class="hint">Ищет переименованные задачи по комбинации слов и символов. Консервативный порог, чтобы не было ложных совпадений.</span>
+          </div>
+          <label class="switch">
+            <input id="fuzzyMatching" name="fuzzyMatching" type="checkbox">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="sr-only">Включить нечёткое сопоставление</span>
+          </label>
+        </div>
+
+        <div class="fields">
+          <label class="field">
+            <span class="field-label">Тегов на диаграмме</span>
+            <span class="control">
+              <input id="topTags" name="topTags" type="number" min="5" max="20" step="1" inputmode="numeric">
+              <span class="unit">шт.</span>
+            </span>
+            <span class="hint">Остальные теги объединяются в сегмент «другие».</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Задач в блоке «Из тренировок»</span>
+            <span class="control">
+              <input id="recentLimit" name="recentLimit" type="number" min="3" max="10" step="1" inputmode="numeric">
+              <span class="unit">шт.</span>
+            </span>
+            <span class="hint">Показываются последние найденные оригиналы из gym.</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-heading card-heading-row">
+          <div>
+            <h2>Хранилище</h2>
+            <p>Данные лежат только в <code>chrome.storage.local</code> и никуда не отправляются.</p>
+          </div>
+          <button class="btn btn-danger-ghost" type="button" id="clear-cache">Очистить кэш</button>
+        </div>
+        <div class="cache-grid" id="cache-info">
+          <div class="cache-cell"><span>Использовано</span><strong id="cache-bytes">—</strong></div>
+          <div class="cache-cell"><span>Архив CF</span><strong id="cache-cf">—</strong></div>
+          <div class="cache-cell"><span>Архив AtCoder</span><strong id="cache-atcoder">—</strong></div>
+          <div class="cache-cell"><span>Профилей в кэше</span><strong id="cache-profiles">—</strong></div>
+        </div>
+        <div class="cache-details" id="cache-details" hidden>
+          <div class="cache-detail-title">Сохранённые профили</div>
+          <ul id="cache-handles"></ul>
+        </div>
+        <div class="cooldown" id="cooldown" hidden></div>
+      </section>
+
+      <section class="card about">
+        <h2>О расширении</h2>
+        <p>
+          CF Stats+ берёт публичные данные через официальный
+          <a href="https://codeforces.com/apiHelp" target="_blank" rel="noopener noreferrer">Codeforces API</a>
+          и открытый архив
+          <a href="https://kenkoooo.com/atcoder/" target="_blank" rel="noopener noreferrer">AtCoder Problems</a>.
+          Никакой сервер расширения не используется, аккаунты и пароли не запрашиваются.
+        </p>
+        <p>
+          Разрешения: <code>storage</code> — локальный кэш; <code>unlimitedStorage</code> — архивы задач;
+          доступ к <code>codeforces.com</code> и <code>kenkoooo.com</code> — только для чтения JSON.
+          Графики рисует локально встроенный Chart.js, удалённые скрипты не загружаются.
+        </p>
+        <div class="about-footer">
+          <span>Версия <span id="version-text">1.0.0</span> · Manifest V3</span>
+          <span>Chrome / Firefox</span>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button class="btn btn-primary" type="submit" id="save">Сохранить настройки</button>
+        <button class="btn" type="button" id="reset">Сбросить по умолчанию</button>
+        <span class="save-status" id="save-status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <footer class="page-footer">
+      <span>CF Stats+ · неофициальное расширение</span>
+      <span>Данные принадлежат Codeforces и AtCoder Problems</span>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="lib/constants.js"></script>
+  <script src="lib/storage.js"></script>
+  <script src="lib/settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
