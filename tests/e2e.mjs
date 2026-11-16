@@ -150,7 +150,7 @@ async function main() {
     }))()`);
     console.log('  options:', JSON.stringify(optionsInfo));
     check('options page loads with local scripts', optionsInfo.hasForm === true &&
-      optionsInfo.version === 'v2.0.0', JSON.stringify(optionsInfo));
+      optionsInfo.version === 'v2.0.1', JSON.stringify(optionsInfo));
     check('options page exposes HTML scraping controls',
       optionsInfo.htmlScraping === true && Number(optionsInfo.maxScrapePages) === 180,
       JSON.stringify(optionsInfo));

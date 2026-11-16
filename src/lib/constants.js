@@ -17,7 +17,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.0.0';
+  const VERSION = '2.0.1';
 
   const MSG = Object.freeze({
     GET_STATS: 'CFS_GET_STATS',
@@ -41,7 +41,7 @@
     ATCODER_ARCHIVE: 'cfs:archive:atcoder:v1',
     STATUS_PREFIX: 'cfs:status:v1:',
     STATUS_INDEX: 'cfs:status:index:v1',
-    SCRAPE_PREFIX: 'cfs:scrape:v2:',
+    SCRAPE_PREFIX: 'cfs:scrape:v3:',
     SETTINGS: 'cfs:settings:v1',
     COOLDOWN: 'cfs:cooldown:v1',
   });

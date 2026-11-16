@@ -179,7 +179,9 @@
         }
         if (scrapeMeta.partial) {
           warnings.add('HTML-сбор посылок остановился на странице ' +
-            (scrapeMeta.pages || '?') + ' — данные могут быть неполными.');
+            (scrapeMeta.pages || '?') +
+            (scrapeMeta.stopReason ? ' (' + scrapeMeta.stopReason + ')' : '') +
+            ' — данные могут быть неполными.');
         } else if (scrapeMeta.stopReason && scrapeMeta.stopReason !== 'end' &&
                    scrapeMeta.stopReason !== 'limit' && scrapeMeta.stopReason !== 'stale-cache') {
           warnings.add('HTML-сбор посылок остановился: ' + scrapeMeta.stopReason +

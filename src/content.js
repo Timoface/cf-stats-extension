@@ -1320,7 +1320,7 @@
   const SCRAPE_DEFAULT_CONFIG = {
     htmlScraping: true,
     maxScrapePages: 180,
-    scrapeDelayMs: 300,
+    scrapeDelayMs: 600,
     cacheTtlMs: 15 * 60 * 1000,
     pageSize: 30,
   };
@@ -1375,6 +1375,96 @@
     });
   }
 
+  function parseRetryAfter(value) {
+    if (!value) return 0;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.min(60000, Math.round(seconds * 1000));
+    }
+    const when = Date.parse(value);
+    if (Number.isFinite(when)) return Math.min(60000, Math.max(0, when - Date.now()));
+    return 0;
+  }
+
+  /**
+   * Fetches one submissions page with bounded retries.
+   *
+   * 404 is a normal end of pagination and is returned immediately. 403/429,
+   * 5xx, network errors, timeouts and Cloudflare interstitials are retried with
+   * exponential backoff (respecting Retry-After). Only after all attempts are
+   * exhausted does the caller mark the scrape as partial.
+   */
+  async function fetchSubmissionPage(url, onRetry) {
+    const maxAttempts = 5;
+    let backoff = 2500;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      let response;
+      try {
+        response = await fetchWithTimeout(url, 20000);
+      } catch (error) {
+        const reason = error && error.name === 'AbortError' ? 'timeout' : 'network';
+        if (attempt >= maxAttempts) {
+          return { ok: false, reason, attempts: attempt };
+        }
+        const wait = Math.min(30000, backoff + Math.floor(Math.random() * 400));
+        if (onRetry) onRetry(reason, attempt, wait);
+        await delay(wait);
+        backoff = Math.min(15000, backoff * 2);
+        continue;
+      }
+
+      if (response.status === 404) {
+        return { ok: false, end: true, reason: 'end', attempts: attempt };
+      }
+
+      if (!response.ok) {
+        const status = response.status;
+        const retryable = status === 403 || status === 408 || status === 425 ||
+          status === 429 || status >= 500;
+        if (!retryable || attempt >= maxAttempts) {
+          return { ok: false, reason: 'http-' + status, status, attempts: attempt };
+        }
+        const retryAfter = parseRetryAfter(response.headers.get('Retry-After'));
+        const wait = Math.min(30000, Math.max(backoff, retryAfter)) +
+          Math.floor(Math.random() * 400);
+        if (onRetry) onRetry('http-' + status, attempt, wait);
+        await delay(wait);
+        backoff = Math.min(15000, backoff * 2);
+        continue;
+      }
+
+      let html;
+      try {
+        html = await response.text();
+      } catch (error) {
+        if (attempt >= maxAttempts) {
+          return { ok: false, reason: 'network', attempts: attempt };
+        }
+        const wait = Math.min(30000, backoff + Math.floor(Math.random() * 400));
+        if (onRetry) onRetry('network', attempt, wait);
+        await delay(wait);
+        backoff = Math.min(15000, backoff * 2);
+        continue;
+      }
+
+      if (CFS_SCRAPE.looksLikeChallenge(html)) {
+        if (attempt >= maxAttempts) {
+          return { ok: false, reason: 'cloudflare', attempts: attempt };
+        }
+        const wait = Math.min(30000, backoff + Math.floor(Math.random() * 400));
+        if (onRetry) onRetry('cloudflare', attempt, wait);
+        await delay(wait);
+        backoff = Math.min(15000, backoff * 2);
+        continue;
+      }
+
+      return { ok: true, html, attempts: attempt, retries: attempt - 1 };
+    }
+
+    return { ok: false, reason: 'network', attempts: maxAttempts };
+  }
+
   function isCurrentLoad(seq, requestedHandle) {
     return seq === state.loadSeq && !!state.host && state.handle === requestedHandle;
   }
@@ -1397,9 +1487,12 @@
     let partial = false;
     let truncated = false;
     let lastSignature = '';
+    let detectedPageSize = 0;
+    let retries = 0;
+    let pageDelay = 0;
 
     const maxPages = Math.max(1, Math.min(180, Number(config.maxScrapePages) || 180));
-    const delayMs = Math.max(100, Math.min(2000, Number(config.scrapeDelayMs) || 300));
+    pageDelay = Math.max(100, Math.min(2000, Number(config.scrapeDelayMs) || 600));
 
     for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
       if (!isCurrentLoad(seq, requestedHandle)) {
@@ -1417,45 +1510,39 @@
       }
 
       const url = CFS_SCRAPE.pageUrl(location.origin, handle, pageNumber);
-      let response;
-      try {
-        response = await fetchWithTimeout(url, 20000);
-      } catch (error) {
-        stopReason = error && error.name === 'AbortError' ? 'timeout' : 'network';
-        partial = pages > 0;
-        break;
-      }
+      const page = await fetchSubmissionPage(url, function (reason, attempt, wait) {
+        if (!progress) return;
+        const label = reason === 'network' ? 'сеть'
+          : (reason === 'timeout' ? 'таймаут'
+            : (reason === 'cloudflare' ? 'проверка Cloudflare' : reason));
+        progress('Страница ' + pageNumber + ' не загрузилась (' + label +
+          '). Повтор ' + attempt + '/3 через ' + Math.max(1, Math.round(wait / 1000)) +
+          ' с…');
+      });
 
-      if (!response.ok) {
-        if (response.status === 404) {
+      if (!page.ok) {
+        if (page.end) {
           stopReason = 'end';
         } else {
-          stopReason = 'http-' + response.status;
+          stopReason = page.reason;
           partial = pages > 0;
         }
         break;
       }
 
-      let html;
-      try {
-        html = await response.text();
-      } catch (error) {
-        stopReason = 'network';
-        partial = pages > 0;
-        break;
+      retries += page.retries || 0;
+      if (page.retries) {
+        // A rate limit usually means 300 ms is too aggressive for this profile.
+        pageDelay = Math.max(pageDelay, 1200);
       }
-
-      if (CFS_SCRAPE.looksLikeChallenge(html)) {
-        stopReason = 'cloudflare';
-        partial = pages > 0;
-        break;
-      }
+      const html = page.html;
 
       const parsed = CFS_SCRAPE.parseSubmissionsHtml(html, url);
       if (!parsed.hasTable || parsed.rows === 0) {
         stopReason = 'end';
         break;
       }
+      if (pageNumber === 1) detectedPageSize = parsed.rows;
 
       const firstId = (html.match(/data-submission-id=["']?(\d+)/) || [])[1] || '';
       const signature = parsed.rows + ':' + firstId;
@@ -1483,12 +1570,19 @@
           ', найдено задач ' + formatNumber(solved.size) + '…');
       }
 
+      // Pages are queried in fixed slices. A short page is the last one; do not
+      // waste a request (which sometimes returns 403 instead of 404).
+      if (detectedPageSize > 0 && parsed.rows < detectedPageSize) {
+        stopReason = 'end';
+        break;
+      }
+
       if (pageNumber === maxPages) {
         truncated = true;
         stopReason = 'limit';
         break;
       }
-      await delay(delayMs + Math.floor(Math.random() * 150));
+      await delay(pageDelay + Math.floor(Math.random() * 150));
     }
 
     const solvedList = Array.from(solved.values());
@@ -1502,6 +1596,7 @@
       partial: partial && solvedList.length > 0,
       truncated,
       stopReason,
+      retries,
       elapsedMs: Date.now() - startedAt,
       fromCache: false,
     };
@@ -1549,7 +1644,11 @@
           if (result.solved.length > 0 || result.meta.pages > 0) {
             scraped = result.solved;
             scrapeMeta = result.meta;
-            saveScrapeCache(requestedHandle, { solved: result.solved, meta: result.meta });
+            // Never cache a partial scrape: the next profile open should retry
+            // the missing pages instead of showing the same truncated history.
+            if (!result.meta.partial) {
+              saveScrapeCache(requestedHandle, { solved: result.solved, meta: result.meta });
+            }
           } else if (cache.data && Array.isArray(cache.data.solved) && cache.data.solved.length > 0) {
             // The HTML pages are blocked, but a previous successful pass is
             // still more complete than the public API (it may contain groups).

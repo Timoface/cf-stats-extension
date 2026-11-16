@@ -17,7 +17,7 @@
     statusTtlMinutes: 15,
     htmlScraping: true,
     maxScrapePages: 180,
-    scrapeDelayMs: 300,
+    scrapeDelayMs: 600,
     atcoderEnabled: true,
     fuzzyMatching: true,
     topTags: 12,

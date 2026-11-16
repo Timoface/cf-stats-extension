@@ -56,14 +56,26 @@ const PAGE_TWO = submissionsPage([
   row(6, '/contest/1/problem/A', 'A. Theatre Square', 'Полное решение'),
   row(7, '/group/abc/contest/999998/problem/D', 'D - Ещё задача', 'Accepted'),
   row(8, '/group/abc/contest/999998/problem/D', 'D - Ещё задача', 'Accepted'),
+  row(10, '/group/abc/contest/999998/problem/E', 'E - Rejected', 'Wrong answer'),
+  row(11, '/group/abc/contest/999998/problem/F', 'F - Rejected', 'Неправильный ответ'),
 ]);
 
 const PARTIAL_PAGE_ONE = submissionsPage([
   row(9, '/contest/4/problem/A', 'A. Watermelon', 'Accepted'),
 ]);
 
+const RETRY_PAGE_ONE = submissionsPage([
+  row(12, '/contest/4/problem/A', 'A - Watermelon', 'Accepted'),
+  row(13, '/contest/1/problem/A', 'A. Theatre Square', 'Wrong answer'),
+]);
+
+const RETRY_PAGE_TWO = submissionsPage([
+  row(14, '/contest/1/problem/A', 'A. Theatre Square', 'Accepted'),
+]);
+
 function startServer() {
   const profileHtml = fs.readFileSync(path.join(root, 'tests', 'e2e', 'profile.html'), 'utf8');
+  let retryPageOneRequests = 0;
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (url.pathname.startsWith('/profile/')) {
@@ -84,6 +96,33 @@ function startServer() {
         }
         response.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
         response.end('<h1>403 Forbidden</h1>');
+        return;
+      }
+      if (requestedHandle === 'retry_user') {
+        requestedPages.push('retry-' + pageNumber);
+        if (pageNumber === 1 && retryPageOneRequests === 0) {
+          retryPageOneRequests += 1;
+          response.writeHead(429, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Retry-After': '0',
+            'Cache-Control': 'no-store',
+          });
+          response.end('<h1>429 Too Many Requests</h1>');
+          return;
+        }
+        if (pageNumber === 1) {
+          retryPageOneRequests += 1;
+          response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          response.end(RETRY_PAGE_ONE);
+          return;
+        }
+        if (pageNumber === 2) {
+          response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          response.end(RETRY_PAGE_TWO);
+          return;
+        }
+        response.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end('<h1>404 Not Found</h1>');
         return;
       }
       requestedPages.push(pageNumber);
@@ -225,7 +264,27 @@ async function main() {
       requestedPages.includes('partial-1') && requestedPages.includes('partial-2'),
       requestedPages.join(','));
 
-    const relevantErrors = opened.errors.filter((text) => !/40[34]|favicon/i.test(text));
+    page.close();
+    page = null;
+    const retryOpened = await openPage(browser, server.url + '/profile/retry_user', {
+      viewport: { width: 1280, height: 1700 },
+    });
+    page = retryOpened.page;
+    await waitForCondition(page,
+      'document.documentElement.dataset.cfsState === "ready" || document.documentElement.dataset.cfsState === "error"',
+      60000, 200);
+    const retried = await panelSnapshot(page);
+    console.log('  retry snapshot:', JSON.stringify(retried, null, 2));
+    const retryRequests = requestedPages.filter((entry) => entry === 'retry-1');
+    check('429 on page 1 is retried and the widget still completes',
+      retried.state === 'ready' && retried.total === 2 && retried.warnings.length === 0,
+      JSON.stringify(retried));
+    check('the 429 page was fetched twice before continuing', retryRequests.length === 2,
+      requestedPages.join(','));
+    check('a short last page is not followed by an extra request',
+      !requestedPages.includes('retry-3'), requestedPages.join(','));
+
+    const relevantErrors = opened.errors.filter((text) => !/40[34]|429|favicon/i.test(text));
     check('no page JS errors during HTML scraping', relevantErrors.length === 0,
       relevantErrors.join(' | '));
   } finally {
