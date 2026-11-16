@@ -17,7 +17,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.0.1';
+  const VERSION = '2.0.2';
 
   const MSG = Object.freeze({
     GET_STATS: 'CFS_GET_STATS',

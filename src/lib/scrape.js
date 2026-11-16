@@ -82,9 +82,28 @@
    * @returns {{rows:number, solved:Array, accepted:number, hasTable:boolean}}
    */
   function parseSubmissionsDocument(doc, baseUrl) {
-    if (!doc) return { rows: 0, solved: [], accepted: 0, hasTable: false };
+    if (!doc) {
+      return {
+        rows: 0, solved: [], accepted: 0, hasTable: false,
+        hasPagination: false, hasNextPage: false,
+      };
+    }
     const table = doc.querySelector('table.status-frame-datatable');
-    if (!table) return { rows: 0, solved: [], accepted: 0, hasTable: false };
+    if (!table) {
+      return {
+        rows: 0, solved: [], accepted: 0, hasTable: false,
+        hasPagination: false, hasNextPage: false,
+      };
+    }
+    const pagination = doc.querySelector('.pagination');
+    const hasPagination = !!pagination;
+    const hasNextPage = !!(pagination && (
+      pagination.textContent.includes('→') ||
+      /(^|\s)(next|вперёд|дальше)(\s|$)/i.test(pagination.textContent) ||
+      Array.from(pagination.querySelectorAll('a')).some(function (anchor) {
+        return /→|»|›|next|вперёд|дальше/i.test(anchor.textContent || '');
+      })
+    ));
 
     let rows = Array.from(table.querySelectorAll('tr[data-submission-id]'));
     if (!rows.length) {
@@ -134,12 +153,17 @@
       solved: Array.from(solved.values()),
       accepted,
       hasTable: true,
+      hasPagination,
+      hasNextPage,
     };
   }
 
   function parseSubmissionsHtml(html, baseUrl) {
     if (!html || typeof DOMParser === 'undefined') {
-      return { rows: 0, solved: [], accepted: 0, hasTable: false };
+      return {
+        rows: 0, solved: [], accepted: 0, hasTable: false,
+        hasPagination: false, hasNextPage: false,
+      };
     }
     const doc = new DOMParser().parseFromString(String(html), 'text/html');
     return parseSubmissionsDocument(doc, baseUrl);

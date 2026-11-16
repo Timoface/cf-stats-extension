@@ -182,7 +182,7 @@ stats.performance = {
   statusTruncated: false,
   statusPages: 42,
 };
-stats.version = '2.0.1';
+stats.version = '2.0.2';
 stats.isStale = false;
 
 const output = 'window.CFS_MOCK_STATS = ' + JSON.stringify(stats, null, 2) + ';\n';

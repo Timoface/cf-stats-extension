@@ -1,7 +1,7 @@
 window.CFS_MOCK_STATS = {
   "handle": "demo_user",
-  "generatedAt": 1794858220922,
-  "fetchedAt": 1794857980869,
+  "generatedAt": 1794859228922,
+  "fetchedAt": 1794858988868,
   "totalSubmissions": 2784,
   "totalSolved": 930,
   "rawSolved": 1080,
@@ -520,13 +520,13 @@ window.CFS_MOCK_STATS = {
   "archives": {
     "codeforces": {
       "count": 10000,
-      "fetchedAt": 1794847420869,
+      "fetchedAt": 1794848428868,
       "stale": false,
       "fromCache": true
     },
     "atcoder": {
       "count": 9959,
-      "fetchedAt": 1794840220869,
+      "fetchedAt": 1794841228868,
       "stale": false,
       "fromCache": true,
       "enabled": true,
@@ -550,6 +550,6 @@ window.CFS_MOCK_STATS = {
     "statusTruncated": false,
     "statusPages": 42
   },
-  "version": "2.0.1",
+  "version": "2.0.2",
   "isStale": false
 };

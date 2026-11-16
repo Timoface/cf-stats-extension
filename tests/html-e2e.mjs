@@ -35,12 +35,17 @@ function row(id, href, label, verdict) {
   </tr>`;
 }
 
-function submissionsPage(rows) {
+function submissionsPage(rows, options) {
+  const opts = options || {};
+  const pagination = opts.pagination
+    ? `<div class="pagination">${opts.hasNext ? '<a href="#">→</a>' : '<a href="#">←</a>'}</div>`
+    : '';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Submissions</title></head><body>
     <table class="status-frame-datatable">
       <thead><tr><th>#</th><th>When</th><th>Who</th><th>Problem</th><th>Lang</th><th>Verdict</th><th>Time</th><th>Memory</th></tr></thead>
       <tbody>${rows.join('')}</tbody>
     </table>
+    ${pagination}
   </body></html>`;
 }
 
@@ -72,6 +77,16 @@ const RETRY_PAGE_ONE = submissionsPage([
 const RETRY_PAGE_TWO = submissionsPage([
   row(14, '/contest/1/problem/A', 'A. Theatre Square', 'Accepted'),
 ]);
+
+const PAGINATION_PAGE_ONE = submissionsPage([
+  row(20, '/contest/4/problem/A', 'A - Watermelon', 'Accepted'),
+  row(21, '/group/abc/contest/999999/problem/C', 'C - Внешняя задача', 'Полное решение'),
+], { pagination: true, hasNext: true });
+
+const PAGINATION_PAGE_TWO = submissionsPage([
+  row(22, '/contest/1/problem/A', 'A. Theatre Square', 'Accepted'),
+  row(23, '/group/abc/contest/999998/problem/D', 'D - Ещё задача', 'Accepted'),
+], { pagination: true, hasNext: false });
 
 function startServer() {
   const profileHtml = fs.readFileSync(path.join(root, 'tests', 'e2e', 'profile.html'), 'utf8');
@@ -123,6 +138,22 @@ function startServer() {
         }
         response.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
         response.end('<h1>404 Not Found</h1>');
+        return;
+      }
+      if (requestedHandle === 'pagination_user') {
+        requestedPages.push('pagination-' + pageNumber);
+        if (pageNumber === 1) {
+          response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          response.end(PAGINATION_PAGE_ONE);
+          return;
+        }
+        if (pageNumber === 2) {
+          response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          response.end(PAGINATION_PAGE_TWO);
+          return;
+        }
+        response.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end('<h1>403 Forbidden</h1>');
         return;
       }
       requestedPages.push(pageNumber);
@@ -283,6 +314,23 @@ async function main() {
       requestedPages.join(','));
     check('a short last page is not followed by an extra request',
       !requestedPages.includes('retry-3'), requestedPages.join(','));
+
+    page.close();
+    page = null;
+    const paginationOpened = await openPage(browser, server.url + '/profile/pagination_user', {
+      viewport: { width: 1280, height: 1700 },
+    });
+    page = paginationOpened.page;
+    await waitForCondition(page,
+      'document.documentElement.dataset.cfsState === "ready" || document.documentElement.dataset.cfsState === "error"',
+      60000, 200);
+    const pagination = await panelSnapshot(page);
+    console.log('  pagination snapshot:', JSON.stringify(pagination, null, 2));
+    check('no → in pagination is treated as the last page',
+      pagination.state === 'ready' && pagination.total === 4 && pagination.warnings.length === 0,
+      JSON.stringify(pagination));
+    check('the page after a last-page pagination was not requested',
+      !requestedPages.includes('pagination-3'), requestedPages.join(','));
 
     const relevantErrors = opened.errors.filter((text) => !/40[34]|429|favicon/i.test(text));
     check('no page JS errors during HTML scraping', relevantErrors.length === 0,

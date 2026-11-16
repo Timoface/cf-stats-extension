@@ -1570,6 +1570,13 @@
           ', найдено задач ' + formatNumber(solved.size) + '…');
       }
 
+      // Same termination signal as the reference userscript: Codeforces renders
+      // a → link only when a next submissions page exists.
+      if (parsed.hasPagination && !parsed.hasNextPage) {
+        stopReason = 'end';
+        break;
+      }
+
       // Pages are queried in fixed slices. A short page is the last one; do not
       // waste a request (which sometimes returns 403 instead of 404).
       if (detectedPageSize > 0 && parsed.rows < detectedPageSize) {
