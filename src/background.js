@@ -99,6 +99,39 @@
     return catalog;
   }
 
+  function normalizeScrapedProblems(items) {
+    const result = new Map();
+    for (const item of Array.isArray(items) ? items : []) {
+      if (!item || typeof item !== 'object') continue;
+      const name = String(item.name == null ? '' : item.name).trim();
+      if (!name) continue;
+      const group = item.group === true || item.g === 1 || item.g === true;
+      const contestId = !group && Number.isFinite(Number(item.contestId)) && Number(item.contestId) > 0
+        ? Number(item.contestId)
+        : null;
+      const index = String(item.index == null ? '' : item.index).trim();
+      const url = String(item.url == null ? '' : item.url).trim();
+      const key = group
+        ? 'group:' + (url || CFS_NORMALIZE.normalizeTitle(name))
+        : (contestId != null && index
+          ? 'id:' + contestId + ':' + index
+          : 'name:' + CFS_NORMALIZE.normalizeTitle(name));
+      if (!result.has(key)) {
+        result.set(key, {
+          c: contestId,
+          i: index,
+          n: name,
+          g: group ? 1 : 0,
+          u: url || null,
+          r: null,
+          t: [],
+          ts: 0,
+        });
+      }
+    }
+    return Array.from(result.values());
+  }
+
   async function doGetStats(message, sender) {
     const startedAt = Date.now();
     const rawHandle = message && message.handle;
@@ -114,17 +147,62 @@
     const tabId = sender && sender.tab ? sender.tab.id : null;
     const progress = makeProgress(tabId, handle);
     const warnings = warningCollector();
+    const scrapeMeta = message && message.scrapeMeta && typeof message.scrapeMeta === 'object'
+      ? message.scrapeMeta
+      : null;
+    const hasScraped = Array.isArray(message && message.scraped);
+    let status;
 
     progress({ stage: 'start', message: 'Начинаю сбор статистики…' });
 
-    // 1. User submissions. This is the only truly fatal request: without any
-    // cached status there is nothing to visualize.
-    progress({ stage: 'status', message: 'Загружаю посылки @' + handle + '…' });
-    const status = await CFS_API.fetchUserStatus(handle, {
-      force,
-      settings,
-      onProgress: progress,
-    });
+    if (hasScraped) {
+      const solved = normalizeScrapedProblems(message.scraped);
+      status = {
+        data: {
+          solved,
+          totalSubmissions: Number(scrapeMeta && scrapeMeta.totalRows) || solved.length,
+          pages: Number(scrapeMeta && scrapeMeta.pages) || 0,
+          truncated: !!(scrapeMeta && scrapeMeta.truncated),
+        },
+        fetchedAt: Number(scrapeMeta && scrapeMeta.fetchedAt) || Date.now(),
+        fromCache: !!(scrapeMeta && scrapeMeta.fromCache),
+        stale: false,
+        source: 'html',
+      };
+      if (scrapeMeta) {
+        if (scrapeMeta.stale) {
+          warnings.add('HTML-страницы посылок сейчас недоступны — показан сохранённый ' +
+            'HTML-кэш. Он может быть неполным.');
+        }
+        if (scrapeMeta.fromCache) {
+          // The HTML cache is already visible in the panel; no warning needed.
+        }
+        if (scrapeMeta.partial) {
+          warnings.add('HTML-сбор посылок остановился на странице ' +
+            (scrapeMeta.pages || '?') + ' — данные могут быть неполными.');
+        } else if (scrapeMeta.stopReason && scrapeMeta.stopReason !== 'end' &&
+                   scrapeMeta.stopReason !== 'limit' && scrapeMeta.stopReason !== 'stale-cache') {
+          warnings.add('HTML-сбор посылок остановился: ' + scrapeMeta.stopReason +
+            '. Показаны уже собранные данные.');
+        }
+        if (scrapeMeta.truncated) {
+          warnings.add('Достигнут лимит страниц HTML-сбора. Увеличьте лимит в настройках, ' +
+            'если у вас очень длинная история посылок.');
+        }
+      }
+    } else {
+      progress({ stage: 'status', message: 'Загружаю посылки @' + handle + '…' });
+      status = await CFS_API.fetchUserStatus(handle, {
+        force,
+        settings,
+        onProgress: progress,
+      });
+      status.source = 'api';
+      if (settings.htmlScraping) {
+        warnings.add('HTML-страницы посылок недоступны — использован публичный API. ' +
+          'Задачи из закрытых групп могут быть не видны.');
+      }
+    }
 
     // 2. Official Codeforces archive.
     let cfArchive = null;
@@ -166,7 +244,7 @@
     if (status.cacheWriteFailed) {
       warnings.add('Не удалось обновить локальный кэш посылок (хранилище недоступно).');
     }
-    if (status.data && status.data.truncated) {
+    if (status.data && status.data.truncated && status.source === 'api') {
       warnings.add('История посылок очень большая: обработаны первые ' +
         (CFS_CONST.MAX_STATUS_PAGES * CFS_CONST.STATUS_PAGE_SIZE).toLocaleString('ru-RU') + '.');
     }
@@ -245,6 +323,8 @@
     stats.performance = {
       elapsedMs: Date.now() - startedAt,
       statusFromCache: !!status.fromCache,
+      statusSource: status.source || 'api',
+      scrapePages: status.source === 'html' ? (status.data.pages || 0) : 0,
       cfArchiveFromCache: !!(cfArchive && cfArchive.fromCache),
       atcoderArchiveFromCache: !!(atcoderArchive && atcoderArchive.fromCache),
       atcoderDisabled: !!(atcoderArchive && atcoderArchive.disabled),
@@ -293,6 +373,50 @@
           console.error('[CF Stats+] Stats request failed', error);
           return { ok: false, error: serializeError(error) };
         }
+
+      case CFS_CONST.MSG.GET_SCRAPE_CONFIG: {
+        const settings = await CFS_SETTINGS.load();
+        return {
+          ok: true,
+          data: {
+            htmlScraping: !!settings.htmlScraping,
+            maxScrapePages: settings.maxScrapePages,
+            scrapeDelayMs: settings.scrapeDelayMs,
+            cacheTtlMs: settings.statusTtlMinutes * 60 * 1000,
+            pageSize: CFS_CONST.SCRAPE_PAGE_SIZE,
+          },
+        };
+      }
+
+      case CFS_CONST.MSG.GET_SCRAPE_CACHE: {
+        const handle = CFS_NORMALIZE.normalizeHandle(message.handle);
+        if (!CFS_NORMALIZE.isValidHandle(handle)) {
+          return { ok: false, error: { code: 'INVALID_HANDLE', message: 'Invalid handle' } };
+        }
+        const settings = await CFS_SETTINGS.load();
+        const cached = await CFS_STORAGE.readCache(CFS_STORAGE.scrapeKey(handle));
+        return {
+          ok: true,
+          data: {
+            data: cached ? cached.data : null,
+            fetchedAt: cached ? cached.fetchedAt : 0,
+            fresh: cached ? CFS_STORAGE.isFresh(cached, settings.statusTtlMinutes * 60 * 1000) : false,
+          },
+        };
+      }
+
+      case CFS_CONST.MSG.SAVE_SCRAPE_CACHE: {
+        const handle = CFS_NORMALIZE.normalizeHandle(message.handle);
+        if (!CFS_NORMALIZE.isValidHandle(handle)) {
+          return { ok: false, error: { code: 'INVALID_HANDLE', message: 'Invalid handle' } };
+        }
+        const data = message.data && typeof message.data === 'object' ? message.data : null;
+        if (!data || !Array.isArray(data.solved)) {
+          return { ok: false, error: { code: 'INVALID_SCRAPE_DATA', message: 'Invalid scrape data' } };
+        }
+        await CFS_STORAGE.writeCache(CFS_STORAGE.scrapeKey(handle), data);
+        return { ok: true };
+      }
 
       case CFS_CONST.MSG.GET_CACHE_INFO:
         return { ok: true, data: await CFS_STORAGE.getCacheInfo() };

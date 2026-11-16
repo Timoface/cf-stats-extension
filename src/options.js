@@ -19,6 +19,9 @@
     maxRetries: document.getElementById('maxRetries'),
     archiveTtlHours: document.getElementById('archiveTtlHours'),
     statusTtlMinutes: document.getElementById('statusTtlMinutes'),
+    htmlScraping: document.getElementById('htmlScraping'),
+    maxScrapePages: document.getElementById('maxScrapePages'),
+    scrapeDelayMs: document.getElementById('scrapeDelayMs'),
     atcoderEnabled: document.getElementById('atcoderEnabled'),
     fuzzyMatching: document.getElementById('fuzzyMatching'),
     topTags: document.getElementById('topTags'),
@@ -77,11 +80,21 @@
     fields.maxRetries.value = settings.maxRetries;
     fields.archiveTtlHours.value = settings.archiveTtlHours;
     fields.statusTtlMinutes.value = settings.statusTtlMinutes;
+    fields.htmlScraping.checked = !!settings.htmlScraping;
+    fields.maxScrapePages.value = settings.maxScrapePages;
+    fields.scrapeDelayMs.value = settings.scrapeDelayMs;
     fields.atcoderEnabled.checked = !!settings.atcoderEnabled;
     fields.fuzzyMatching.checked = !!settings.fuzzyMatching;
     fields.topTags.value = settings.topTags;
     fields.recentLimit.value = settings.recentLimit;
     updateDelayWarning();
+    updateHtmlFields();
+  }
+
+  function updateHtmlFields() {
+    const disabled = !fields.htmlScraping.checked;
+    fields.maxScrapePages.disabled = disabled;
+    fields.scrapeDelayMs.disabled = disabled;
   }
 
   function readForm() {
@@ -90,6 +103,9 @@
       maxRetries: fields.maxRetries.value,
       archiveTtlHours: fields.archiveTtlHours.value,
       statusTtlMinutes: fields.statusTtlMinutes.value,
+      htmlScraping: fields.htmlScraping.checked,
+      maxScrapePages: fields.maxScrapePages.value,
+      scrapeDelayMs: fields.scrapeDelayMs.value,
       atcoderEnabled: fields.atcoderEnabled.checked,
       fuzzyMatching: fields.fuzzyMatching.checked,
       topTags: fields.topTags.value,
@@ -166,18 +182,31 @@
     }
 
     if (profilesEl) {
-      profilesEl.textContent = info && info.statuses ? String(info.statuses.length) : '0';
+      const profiles = new Set();
+      for (const status of (info && info.statuses) || []) profiles.add(status.handle);
+      for (const scrape of (info && info.scrapes) || []) profiles.add(scrape.handle);
+      profilesEl.textContent = String(profiles.size);
     }
 
     if (details && handles) {
       handles.textContent = '';
       const statuses = info && Array.isArray(info.statuses) ? info.statuses : [];
-      details.hidden = statuses.length === 0;
+      const scrapes = info && Array.isArray(info.scrapes) ? info.scrapes : [];
+      details.hidden = statuses.length === 0 && scrapes.length === 0;
       for (const status of statuses) {
         const item = document.createElement('li');
-        item.textContent = status.handle + ' · ' + formatRelative(status.fetchedAt);
+        item.textContent = status.handle + ' · API · ' + formatRelative(status.fetchedAt);
         item.title = 'Посылок: ' + (status.totalSubmissions || 0) + ', решённых: ' + (status.solved || 0) +
           '\nОбновлено: ' + formatDateTime(status.fetchedAt);
+        handles.append(item);
+      }
+      for (const scrape of scrapes) {
+        const item = document.createElement('li');
+        item.textContent = scrape.handle + ' · HTML, ' + (scrape.pages || 0) + ' стр. · ' +
+          formatRelative(scrape.fetchedAt);
+        item.title = 'Посылок: ' + (scrape.totalSubmissions || 0) + ', решённых: ' +
+          (scrape.solved || 0) + (scrape.stopReason ? ', конец: ' + scrape.stopReason : '') +
+          '\nОбновлено: ' + formatDateTime(scrape.fetchedAt);
         handles.append(item);
       }
     }
@@ -241,6 +270,7 @@
     const clear = document.getElementById('clear-cache');
     if (clear) clear.addEventListener('click', clearCache);
     fields.minRequestDelayMs.addEventListener('input', updateDelayWarning);
+    fields.htmlScraping.addEventListener('change', updateHtmlFields);
   }
 
   async function init() {

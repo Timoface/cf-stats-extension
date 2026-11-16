@@ -8,6 +8,7 @@ import {
   waitForCondition,
   evaluate,
   connectTarget,
+  screenshot,
   sleep,
 } from './lib/browser.mjs';
 
@@ -143,11 +144,18 @@ async function main() {
       delay: document.getElementById('minRequestDelayMs').value,
       cfCache: document.getElementById('cache-cf').textContent,
       profiles: document.getElementById('cache-profiles').textContent,
-      hasForm: !!document.getElementById('settings-form')
+      hasForm: !!document.getElementById('settings-form'),
+      htmlScraping: document.getElementById('htmlScraping').checked,
+      maxScrapePages: document.getElementById('maxScrapePages').value
     }))()`);
     console.log('  options:', JSON.stringify(optionsInfo));
     check('options page loads with local scripts', optionsInfo.hasForm === true &&
-      optionsInfo.version === 'v1.0.0', JSON.stringify(optionsInfo));
+      optionsInfo.version === 'v2.0.0', JSON.stringify(optionsInfo));
+    check('options page exposes HTML scraping controls',
+      optionsInfo.htmlScraping === true && Number(optionsInfo.maxScrapePages) === 180,
+      JSON.stringify(optionsInfo));
+    const optionsShot = await screenshot(options.page, path.join(root, 'docs', 'options.png'));
+    console.log('  screenshot:', optionsShot.file, optionsShot.width + 'x' + optionsShot.height);
     check('options page sees the cache written by the worker', optionsInfo.cfCache !== 'нет',
       optionsInfo.cfCache);
 

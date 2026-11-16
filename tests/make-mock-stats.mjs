@@ -174,13 +174,15 @@ stats.archives.atcoder.count = 9959;
 stats.performance = {
   elapsedMs: 218,
   statusFromCache: true,
+  statusSource: 'html',
+  scrapePages: 42,
   cfArchiveFromCache: true,
   atcoderArchiveFromCache: true,
   atcoderDisabled: false,
   statusTruncated: false,
-  statusPages: 1,
+  statusPages: 42,
 };
-stats.version = '1.0.0';
+stats.version = '2.0.0';
 stats.isStale = false;
 
 const output = 'window.CFS_MOCK_STATS = ' + JSON.stringify(stats, null, 2) + ';\n';

@@ -30,6 +30,9 @@
         tags: Array.isArray(p.tags) ? p.tags.slice() : [],
         solvedAt: Number(item.creationTimeSeconds) || 0,
         participantType: item.author && item.author.participantType ? item.author.participantType : null,
+        group: false,
+        isGym: MATCHER.isGymContestId(Number(p.contestId)),
+        url: null,
       };
     }
     // Compact cache shape.
@@ -38,6 +41,7 @@
     const name = item.n != null ? item.n : item.name;
     const rating = item.r != null ? item.r : item.rating;
     const tags = item.t != null ? item.t : item.tags;
+    const group = item.g === 1 || item.g === true || item.group === true;
     return {
       contestId: contestId == null || contestId === '' ? null : Number(contestId),
       index: index == null ? '' : String(index),
@@ -49,10 +53,16 @@
       tags: Array.isArray(tags) ? tags.slice() : [],
       solvedAt: Number(item.ts != null ? item.ts : item.solvedAt) || 0,
       participantType: item.pt || null,
+      group,
+      isGym: group || (contestId != null && contestId !== '' && MATCHER.isGymContestId(Number(contestId))),
+      url: item.u || item.url || null,
     };
   }
 
   function rawKey(item) {
+    if (item.group && item.url) {
+      return 'raw:group:' + item.url;
+    }
     if (item.contestId != null && item.index) {
       return 'raw:' + item.contestId + ':' + item.index;
     }
@@ -133,8 +143,8 @@
       if (!existing) {
         resolvedMap.set(resolved.key, Object.assign({}, resolved, {
           solvedAt: item.solvedAt,
-          gymSolvedAt: item.contestId != null && MATCHER.isGymContestId(item.contestId) ? item.solvedAt : 0,
-          gymOriginal: item.contestId != null && MATCHER.isGymContestId(item.contestId) ? resolved.original : null,
+          gymSolvedAt: item.isGym ? item.solvedAt : 0,
+          gymOriginal: item.isGym ? resolved.original : null,
         }));
       } else {
         // Same original problem solved both officially and in a gym: keep one
@@ -142,7 +152,7 @@
         if (item.solvedAt && (!existing.solvedAt || item.solvedAt < existing.solvedAt)) {
           existing.solvedAt = item.solvedAt;
         }
-        if (item.contestId != null && MATCHER.isGymContestId(item.contestId)) {
+        if (item.isGym) {
           existing.isGym = true;
           existing.gymOriginal = resolved.original;
           if (item.solvedAt && (!existing.gymSolvedAt || item.solvedAt < existing.gymSolvedAt)) {

@@ -17,7 +17,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '2.0.0';
 
   const MSG = Object.freeze({
     GET_STATS: 'CFS_GET_STATS',
@@ -25,6 +25,9 @@
     GET_CACHE_INFO: 'CFS_GET_CACHE_INFO',
     CLEAR_CACHE: 'CFS_CLEAR_CACHE',
     OPEN_OPTIONS: 'CFS_OPEN_OPTIONS',
+    GET_SCRAPE_CONFIG: 'CFS_GET_SCRAPE_CONFIG',
+    GET_SCRAPE_CACHE: 'CFS_GET_SCRAPE_CACHE',
+    SAVE_SCRAPE_CACHE: 'CFS_SAVE_SCRAPE_CACHE',
     PING: 'CFS_PING',
   });
 
@@ -38,6 +41,7 @@
     ATCODER_ARCHIVE: 'cfs:archive:atcoder:v1',
     STATUS_PREFIX: 'cfs:status:v1:',
     STATUS_INDEX: 'cfs:status:index:v1',
+    SCRAPE_PREFIX: 'cfs:scrape:v2:',
     SETTINGS: 'cfs:settings:v1',
     COOLDOWN: 'cfs:cooldown:v1',
   });
@@ -45,6 +49,7 @@
   const MAX_STATUS_PAGES = 10;
   const STATUS_PAGE_SIZE = 10000;
   const MAX_CACHED_HANDLES = 8;
+  const SCRAPE_PAGE_SIZE = 30;
 
   // Codeforces rating buckets used by the histogram. The last bucket is 3000+.
   const CF_RATING_BUCKETS = (function () {
@@ -99,6 +104,7 @@
     MAX_STATUS_PAGES,
     STATUS_PAGE_SIZE,
     MAX_CACHED_HANDLES,
+    SCRAPE_PAGE_SIZE,
     CF_RATING_BUCKETS,
     ATCODER_BUCKETS,
     TAG_COLORS,

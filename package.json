@@ -1,6 +1,6 @@
 {
   "name": "cf-stats-plus",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Codeforces profile statistics extension matching solved gym/training problems against the CF and AtCoder archives.",
   "license": "MIT",
@@ -12,6 +12,7 @@
     "test": "node tests/run-tests.mjs && node tests/api-queue-tests.mjs && node tests/validate-manifests.mjs",
     "test:ui": "node tests/ui-harness.mjs",
     "test:e2e": "node tests/e2e.mjs",
+    "test:html": "node tests/html-e2e.mjs",
     "test:firefox": "node tests/firefox-e2e.mjs"
   }
 }

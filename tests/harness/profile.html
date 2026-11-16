@@ -209,6 +209,21 @@
         getURL: function (file) { return '/' + file; },
         openOptionsPage: function () {},
         sendMessage: function (message, callback) {
+          if (message && message.type === 'CFS_GET_SCRAPE_CONFIG') {
+            setTimeout(function () {
+              callback({
+                ok: true,
+                data: {
+                  htmlScraping: false,
+                  maxScrapePages: 180,
+                  scrapeDelayMs: 300,
+                  cacheTtlMs: 900000,
+                  pageSize: 30
+                }
+              });
+            }, 0);
+            return;
+          }
           if (message && message.type === 'CFS_GET_STATS') {
             if (window.__cfsStubMode === 'error') {
               setTimeout(function () {
@@ -296,6 +311,8 @@
     }, 1200);
   </script>
   <script src="/src/lib/constants.js"></script>
+  <script src="/src/lib/normalize.js"></script>
+  <script src="/src/lib/scrape.js"></script>
   <script src="/src/vendor/chart.umd.min.js"></script>
   <script src="/src/content.js"></script>
 </body>

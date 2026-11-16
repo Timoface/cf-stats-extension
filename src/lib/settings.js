@@ -15,6 +15,9 @@
     maxRetries: 4,
     archiveTtlHours: 24,
     statusTtlMinutes: 15,
+    htmlScraping: true,
+    maxScrapePages: 180,
+    scrapeDelayMs: 300,
     atcoderEnabled: true,
     fuzzyMatching: true,
     topTags: 12,
@@ -55,6 +58,19 @@
         DEFAULTS.statusTtlMinutes,
         5,
         240
+      ),
+      htmlScraping: toBoolean(input.htmlScraping, DEFAULTS.htmlScraping),
+      maxScrapePages: clampNumber(
+        input.maxScrapePages,
+        DEFAULTS.maxScrapePages,
+        1,
+        180
+      ),
+      scrapeDelayMs: clampNumber(
+        input.scrapeDelayMs,
+        DEFAULTS.scrapeDelayMs,
+        100,
+        2000
       ),
       atcoderEnabled: toBoolean(input.atcoderEnabled, DEFAULTS.atcoderEnabled),
       fuzzyMatching: toBoolean(input.fuzzyMatching, DEFAULTS.fuzzyMatching),

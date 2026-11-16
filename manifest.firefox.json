@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CF Stats+ — статистика Codeforces",
   "short_name": "CF Stats+",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Статистика Codeforces и AtCoder в профиле: графики сложности и тегов, задачи из тренировок.",
   "icons": {
     "16": "icons/icon16.png",
@@ -49,6 +49,8 @@
       ],
       "js": [
         "src/lib/constants.js",
+        "src/lib/normalize.js",
+        "src/lib/scrape.js",
         "src/vendor/chart.umd.min.js",
         "src/content.js"
       ],

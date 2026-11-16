@@ -6,6 +6,7 @@ const MATCHER = require('../src/lib/matcher.js');
 const STATS = require('../src/lib/stats.js');
 const SETTINGS = require('../src/lib/settings.js');
 const API = require('../src/lib/api.js');
+const SCRAPE = require('../src/lib/scrape.js');
 
 let passed = 0;
 const failures = [];
@@ -398,6 +399,25 @@ test('computes training coverage', () => {
   equal(STATS_DATA.training.unmatched, 1);
 });
 
+test('counts private-group tasks as training even without an official contest id', () => {
+  const data = STATS.buildStats({
+    handle: 'group_user',
+    solved: [{
+      g: 1,
+      n: 'Внешняя задача',
+      u: 'https://codeforces.com/group/abc/contest/12345/problem/A',
+    }],
+    catalog: MATCHER.buildCatalog([], []),
+    totalSubmissions: 1,
+    fetchedAt: 1700000000000,
+    settings: { topTags: 12, recentLimit: 5 },
+  });
+  equal(data.totalSolved, 1);
+  equal(data.training.total, 1);
+  equal(data.training.unmatched, 1);
+  equal(data.sourceCounts.other, 1);
+});
+
 test('builds CF rating buckets including 3000+', () => {
   equal(STATS_DATA.cfRating.rated, 5);
   equal(STATS_DATA.cfRating.unrated, 1);
@@ -538,6 +558,43 @@ test('compactAtCoderProblems merges difficulty models', () => {
   equal(compact[1].difficulty, null);
 });
 
+section('HTML scraper helpers');
+test('accepts English and Russian accepted verdicts', () => {
+  assert(SCRAPE.isAcceptedVerdict('Accepted'));
+  assert(SCRAPE.isAcceptedVerdict('  Полное решение  '));
+  assert(SCRAPE.isAcceptedVerdict('OK'));
+  assert(!SCRAPE.isAcceptedVerdict('Wrong answer'));
+  assert(!SCRAPE.isAcceptedVerdict('Неправильный ответ'));
+});
+
+test('cleans problem prefixes from submission links', () => {
+  equal(SCRAPE.cleanProblemName('A - Арбуз'), 'Арбуз');
+  equal(SCRAPE.cleanProblemName('B. Watermelon'), 'Watermelon');
+  equal(SCRAPE.cleanProblemName('G2) Lakeside Trail'), 'Lakeside Trail');
+});
+
+test('handles official, gym and private-group problem URLs', () => {
+  deepEqual(SCRAPE.parseProblemHref('/contest/4/problem/A'), {
+    contestId: 4, index: 'A', url: 'https://codeforces.com/contest/4/problem/A', group: false,
+  });
+  deepEqual(SCRAPE.parseProblemHref('https://codeforces.com/gym/104000/problem/B'), {
+    contestId: 104000, index: 'B', url: 'https://codeforces.com/gym/104000/problem/B', group: false,
+  });
+  deepEqual(SCRAPE.parseProblemHref('/group/abc/contest/12345/problem/C1'), {
+    contestId: null, index: 'C1',
+    url: 'https://codeforces.com/group/abc/contest/12345/problem/C1', group: true,
+  });
+  deepEqual(SCRAPE.parseProblemHref('/problemset/problem/1/A'), {
+    contestId: 1, index: 'A', url: 'https://codeforces.com/problemset/problem/1/A', group: false,
+  });
+});
+
+test('detects Cloudflare/security challenge pages', () => {
+  assert(SCRAPE.looksLikeChallenge('<title>Just a moment...</title>'));
+  assert(SCRAPE.looksLikeChallenge('Выполнение проверки безопасности'));
+  assert(!SCRAPE.looksLikeChallenge('<table class="status-frame-datatable"></table>'));
+});
+
 section('Settings');
 test('clamps unsafe settings', () => {
   const normalized = SETTINGS.normalizeSettings({
@@ -563,6 +620,17 @@ test('clamps unsafe settings', () => {
 test('uses safe defaults for garbage input', () => {
   deepEqual(SETTINGS.normalizeSettings(null), SETTINGS.normalizeSettings(SETTINGS.DEFAULTS));
   equal(SETTINGS.normalizeSettings({ minRequestDelayMs: 'abc' }).minRequestDelayMs, 2100);
+});
+
+test('clamps HTML scraping settings', () => {
+  const normalized = SETTINGS.normalizeSettings({
+    htmlScraping: 'false',
+    maxScrapePages: 999,
+    scrapeDelayMs: 10,
+  });
+  equal(normalized.htmlScraping, false);
+  equal(normalized.maxScrapePages, 180);
+  equal(normalized.scrapeDelayMs, 100);
 });
 
 if (failures.length) {

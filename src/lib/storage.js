@@ -106,6 +106,10 @@
     return CONST.CACHE.STATUS_PREFIX + String(handle || '').toLowerCase();
   }
 
+  function scrapeKey(handle) {
+    return CONST.CACHE.SCRAPE_PREFIX + String(handle || '').toLowerCase();
+  }
+
   async function rememberStatusHandle(handle) {
     const normalized = String(handle || '').toLowerCase();
     if (!normalized) return;
@@ -159,6 +163,9 @@
     const statusKeys = Object.keys(data).filter(function (key) {
       return key.startsWith(CONST.CACHE.STATUS_PREFIX);
     });
+    const scrapeKeys = Object.keys(data).filter(function (key) {
+      return key.startsWith(CONST.CACHE.SCRAPE_PREFIX);
+    });
     const settings = data[CONST.CACHE.SETTINGS] || null;
     const cooldown = data[CONST.CACHE.COOLDOWN] || null;
 
@@ -187,6 +194,17 @@
           totalSubmissions: entry.data ? entry.data.totalSubmissions || 0 : 0,
         };
       }).sort(function (a, b) { return b.fetchedAt - a.fetchedAt; }),
+      scrapes: scrapeKeys.map(function (key) {
+        const entry = data[key] || {};
+        return {
+          handle: key.slice(CONST.CACHE.SCRAPE_PREFIX.length),
+          fetchedAt: entry.fetchedAt || 0,
+          solved: entry.data && Array.isArray(entry.data.solved) ? entry.data.solved.length : 0,
+          totalSubmissions: entry.data && entry.data.meta ? entry.data.meta.totalRows || 0 : 0,
+          pages: entry.data && entry.data.meta ? entry.data.meta.pages || 0 : 0,
+          stopReason: entry.data && entry.data.meta ? entry.data.meta.stopReason || '' : '',
+        };
+      }).sort(function (a, b) { return b.fetchedAt - a.fetchedAt; }),
       settingsPresent: !!settings,
       cooldown: cooldown || null,
       keys: Object.keys(data).filter(function (key) { return key.startsWith('cfs:'); }).length,
@@ -204,6 +222,7 @@
     removeCache,
     isFresh,
     statusKey,
+    scrapeKey,
     rememberStatusHandle,
     clearStatusCache,
     clearAllCaches,

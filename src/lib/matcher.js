@@ -78,7 +78,8 @@
       looseName: NORMALIZE.normalizeLoose(name),
       compactName: NORMALIZE.normalizeCompact(normName),
       tokens: NORMALIZE.tokenize(normName),
-      isGym: isGymContestId(contestId),
+      isGym: !!(source.group || source.isGym) || isGymContestId(contestId),
+      url: source.url || source.u || null,
     };
   }
 
@@ -556,7 +557,7 @@
         name: raw.name,
         rating: raw.rating,
         tags: raw.tags.slice(),
-        url: cfUrl(raw.contestId, raw.index),
+        url: raw.url || cfUrl(raw.contestId, raw.index),
       },
     };
   }
@@ -575,7 +576,7 @@
       rating: raw.rating,
       difficulty: null,
       tags: raw.tags.slice(),
-      url: cfUrl(raw.contestId, raw.index),
+      url: raw.url || cfUrl(raw.contestId, raw.index),
       isGym: raw.isGym,
       reason: reason || 'no-match',
       atcoderAmbiguous: false,
@@ -585,7 +586,7 @@
         name: raw.name,
         rating: raw.rating,
         tags: raw.tags.slice(),
-        url: cfUrl(raw.contestId, raw.index),
+        url: raw.url || cfUrl(raw.contestId, raw.index),
       },
     }, extra || {});
   }

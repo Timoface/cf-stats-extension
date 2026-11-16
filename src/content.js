@@ -1078,8 +1078,11 @@
     const node = byRole('cache-status');
     if (!node) return;
     const fromCache = stats.performance && stats.performance.statusFromCache;
+    const source = stats.performance && stats.performance.statusSource;
     let text;
-    if (stats.isStale) {
+    if (source === 'html') {
+      text = (fromCache ? 'HTML-кэш' : 'HTML') + ' · ' + formatRelative(stats.fetchedAt);
+    } else if (stats.isStale) {
       text = 'кэш · ' + formatRelative(stats.fetchedAt);
     } else if (fromCache) {
       text = 'кэш · ' + formatRelative(stats.fetchedAt);
@@ -1089,6 +1092,9 @@
     node.textContent = text;
     node.classList.toggle('is-stale', !!stats.isStale);
     node.title = 'Данные от ' + formatDateTime(stats.fetchedAt) +
+      (source === 'html' && stats.performance
+        ? ' · HTML, страниц: ' + (stats.performance.scrapePages || 0)
+        : '') +
       (stats.performance ? ' · ' + stats.performance.elapsedMs + ' мс' : '');
   }
 
@@ -1307,19 +1313,274 @@
     });
   }
 
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  const SCRAPE_DEFAULT_CONFIG = {
+    htmlScraping: true,
+    maxScrapePages: 180,
+    scrapeDelayMs: 300,
+    cacheTtlMs: 15 * 60 * 1000,
+    pageSize: 30,
+  };
+  const SCRAPE_TIME_LIMIT_MS = 150000;
+
+  async function getScrapeConfig() {
+    try {
+      const response = await sendMessage({ type: CFS_CONST.MSG.GET_SCRAPE_CONFIG }, 10000);
+      if (response && response.ok && response.data) {
+        return Object.assign({}, SCRAPE_DEFAULT_CONFIG, response.data);
+      }
+    } catch (error) {
+      console.warn('[CF Stats+] Could not load scrape settings', error);
+    }
+    return SCRAPE_DEFAULT_CONFIG;
+  }
+
+  async function getScrapeCache(handle) {
+    try {
+      const response = await sendMessage({
+        type: CFS_CONST.MSG.GET_SCRAPE_CACHE,
+        handle,
+      }, 10000);
+      if (response && response.ok && response.data) return response.data;
+    } catch (error) {
+      console.warn('[CF Stats+] Could not read HTML scrape cache', error);
+    }
+    return { data: null, fetchedAt: 0, fresh: false };
+  }
+
+  function saveScrapeCache(handle, payload) {
+    sendMessage({
+      type: CFS_CONST.MSG.SAVE_SCRAPE_CACHE,
+      handle,
+      data: payload,
+    }, 10000).catch(function (error) {
+      console.warn('[CF Stats+] Could not save HTML scrape cache', error);
+    });
+  }
+
+  function fetchWithTimeout(url, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, timeoutMs || 20000);
+    return fetch(url, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      redirect: 'follow',
+      headers: { Accept: 'text/html,application/xhtml+xml' },
+      signal: controller.signal,
+    }).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
+  function isCurrentLoad(seq, requestedHandle) {
+    return seq === state.loadSeq && !!state.host && state.handle === requestedHandle;
+  }
+
+  /**
+   * Collects accepted submissions from Codeforces submission HTML pages.
+   *
+   * The page may be visible only with the user's cookies (private groups), so
+   * this deliberately runs in the content script on the Codeforces origin with
+   * credentials: 'same-origin'. Every non-OK/404/empty/challenge response ends
+   * the loop without throwing; already parsed rows are returned.
+   */
+  async function scrapeSubmissions(handle, config, seq, requestedHandle, progress) {
+    const startedAt = Date.now();
+    const solved = new Map();
+    let pages = 0;
+    let totalRows = 0;
+    let accepted = 0;
+    let stopReason = 'end';
+    let partial = false;
+    let truncated = false;
+    let lastSignature = '';
+
+    const maxPages = Math.max(1, Math.min(180, Number(config.maxScrapePages) || 180));
+    const delayMs = Math.max(100, Math.min(2000, Number(config.scrapeDelayMs) || 300));
+
+    for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+      if (!isCurrentLoad(seq, requestedHandle)) {
+        throw makeError('CANCELLED', 'Scrape was cancelled');
+      }
+      if (Date.now() - startedAt > SCRAPE_TIME_LIMIT_MS) {
+        stopReason = 'timeout';
+        partial = solved.size > 0;
+        break;
+      }
+
+      if (progress) {
+        progress('Загружаю посылки: страница ' + pageNumber +
+          (solved.size ? ' · найдено ' + formatNumber(solved.size) + ' задач' : '') + '…');
+      }
+
+      const url = CFS_SCRAPE.pageUrl(location.origin, handle, pageNumber);
+      let response;
+      try {
+        response = await fetchWithTimeout(url, 20000);
+      } catch (error) {
+        stopReason = error && error.name === 'AbortError' ? 'timeout' : 'network';
+        partial = pages > 0;
+        break;
+      }
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          stopReason = 'end';
+        } else {
+          stopReason = 'http-' + response.status;
+          partial = pages > 0;
+        }
+        break;
+      }
+
+      let html;
+      try {
+        html = await response.text();
+      } catch (error) {
+        stopReason = 'network';
+        partial = pages > 0;
+        break;
+      }
+
+      if (CFS_SCRAPE.looksLikeChallenge(html)) {
+        stopReason = 'cloudflare';
+        partial = pages > 0;
+        break;
+      }
+
+      const parsed = CFS_SCRAPE.parseSubmissionsHtml(html, url);
+      if (!parsed.hasTable || parsed.rows === 0) {
+        stopReason = 'end';
+        break;
+      }
+
+      const firstId = (html.match(/data-submission-id=["']?(\d+)/) || [])[1] || '';
+      const signature = parsed.rows + ':' + firstId;
+      if (pageNumber > 1 && signature === lastSignature) {
+        stopReason = 'duplicate-page';
+        partial = solved.size > 0;
+        break;
+      }
+      lastSignature = signature;
+
+      pages = pageNumber;
+      totalRows += parsed.rows;
+      accepted += parsed.accepted;
+      for (const problem of parsed.solved) {
+        const key = problem.group
+          ? 'group:' + (problem.url || CFS_NORMALIZE.normalizeTitle(problem.name))
+          : (problem.contestId != null && problem.index
+            ? 'id:' + problem.contestId + ':' + problem.index
+            : 'name:' + CFS_NORMALIZE.normalizeTitle(problem.name));
+        if (!solved.has(key)) solved.set(key, problem);
+      }
+
+      if (progress) {
+        progress('Страница ' + pageNumber + ': посылок ' + formatNumber(totalRows) +
+          ', найдено задач ' + formatNumber(solved.size) + '…');
+      }
+
+      if (pageNumber === maxPages) {
+        truncated = true;
+        stopReason = 'limit';
+        break;
+      }
+      await delay(delayMs + Math.floor(Math.random() * 150));
+    }
+
+    const solvedList = Array.from(solved.values());
+    const meta = {
+      source: 'html',
+      fetchedAt: Date.now(),
+      pages,
+      totalRows,
+      accepted,
+      complete: stopReason === 'end' && !truncated,
+      partial: partial && solvedList.length > 0,
+      truncated,
+      stopReason,
+      elapsedMs: Date.now() - startedAt,
+      fromCache: false,
+    };
+
+    return { solved: solvedList, meta };
+  }
+
   async function load(force) {
     if (!state.host || !state.handle || state.loading) return;
     const seq = ++state.loadSeq;
     const requestedHandle = state.handle;
     showLoading(!!force);
     try {
-      const response = await sendMessage({
+      let scraped = null;
+      let scrapeMeta = null;
+      const config = await getScrapeConfig();
+
+      if (!isCurrentLoad(seq, requestedHandle)) return;
+
+      if (config.htmlScraping && typeof CFS_SCRAPE !== 'undefined') {
+        const cache = await getScrapeCache(requestedHandle);
+        if (!isCurrentLoad(seq, requestedHandle)) return;
+
+        if (!force && cache.fresh && cache.data && Array.isArray(cache.data.solved)) {
+          scraped = cache.data.solved;
+          scrapeMeta = Object.assign({}, cache.data.meta || {}, {
+            fromCache: true,
+            fetchedAt: cache.fetchedAt || Date.now(),
+          });
+          const progress = byRole('progress-text');
+          if (progress) progress.textContent = 'Использую кэш HTML-посылок…';
+        } else {
+          const result = await scrapeSubmissions(
+            requestedHandle,
+            config,
+            seq,
+            requestedHandle,
+            function (message) {
+              if (!isCurrentLoad(seq, requestedHandle)) return;
+              const progress = byRole('progress-text');
+              if (progress) progress.textContent = message;
+            }
+          );
+          if (!isCurrentLoad(seq, requestedHandle)) return;
+          if (result.solved.length > 0 || result.meta.pages > 0) {
+            scraped = result.solved;
+            scrapeMeta = result.meta;
+            saveScrapeCache(requestedHandle, { solved: result.solved, meta: result.meta });
+          } else if (cache.data && Array.isArray(cache.data.solved) && cache.data.solved.length > 0) {
+            // The HTML pages are blocked, but a previous successful pass is
+            // still more complete than the public API (it may contain groups).
+            scraped = cache.data.solved;
+            scrapeMeta = Object.assign({}, cache.data.meta || {}, {
+              fromCache: true,
+              stale: true,
+              fetchedAt: cache.fetchedAt || Date.now(),
+              stopReason: 'stale-cache',
+            });
+          }
+        }
+      }
+
+      if (!isCurrentLoad(seq, requestedHandle)) return;
+      const progress = byRole('progress-text');
+      if (progress) progress.textContent = 'Загружаю архивы и считаю статистику…';
+
+      const message = {
         type: CFS_CONST.MSG.GET_STATS,
         handle: requestedHandle,
         force: !!force,
-      }, MESSAGE_TIMEOUT_MS);
+      };
+      if (scraped !== null) {
+        message.scraped = scraped;
+        message.scrapeMeta = scrapeMeta;
+      }
 
-      if (seq !== state.loadSeq || !state.host || state.handle !== requestedHandle) return;
+      const response = await sendMessage(message, MESSAGE_TIMEOUT_MS);
+
+      if (!isCurrentLoad(seq, requestedHandle)) return;
       if (!response) throw makeError('NO_RESPONSE', 'Empty response from background');
       if (!response.ok) {
         const details = response.error || {};
@@ -1332,7 +1593,8 @@
       finishLoading();
       renderStats();
     } catch (error) {
-      if (seq !== state.loadSeq || !state.host || state.handle !== requestedHandle) return;
+      if (error && error.code === 'CANCELLED') return;
+      if (!isCurrentLoad(seq, requestedHandle)) return;
       finishLoading();
       showError(error);
     }

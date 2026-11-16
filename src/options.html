@@ -21,7 +21,7 @@
         <div>
           <div class="brand-title-row">
             <h1>CF Stats+</h1>
-            <span class="badge" id="version-badge">v1.0.0</span>
+            <span class="badge" id="version-badge">v2.0.0</span>
           </div>
           <p class="brand-subtitle">Единая статистика решённых задач по архивам Codeforces и AtCoder</p>
         </div>
@@ -69,6 +69,37 @@
         <p class="warning-line" id="delay-warning" hidden>
           Задержка меньше 2000 мс повышает риск получить лимит или Cloudflare-блокировку.
         </p>
+
+        <div class="switch-row">
+          <div class="switch-copy">
+            <span class="field-label">Собирать посылки через HTML-страницы</span>
+            <span class="hint">Основной режим v2.0: читает /submissions/handle/page/N с cookies браузера и видит посылки из закрытых групп. При ошибке автоматически используется публичный API.</span>
+          </div>
+          <label class="switch">
+            <input id="htmlScraping" name="htmlScraping" type="checkbox">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="sr-only">Собирать посылки через HTML</span>
+          </label>
+        </div>
+
+        <div class="fields">
+          <label class="field">
+            <span class="field-label">Максимум страниц посылок</span>
+            <span class="control">
+              <input id="maxScrapePages" name="maxScrapePages" type="number" min="1" max="180" step="1" inputmode="numeric">
+              <span class="unit">стр.</span>
+            </span>
+            <span class="hint">Одна страница — около 30 посылок. 180 страниц — примерно 5400 посылок. При 404 цикл корректно завершается.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Пауза между HTML-страницами</span>
+            <span class="control">
+              <input id="scrapeDelayMs" name="scrapeDelayMs" type="number" min="100" max="2000" step="50" inputmode="numeric">
+              <span class="unit">мс</span>
+            </span>
+            <span class="hint">Чтобы не провоцировать Cloudflare. Первая страница загружается без паузы.</span>
+          </label>
+        </div>
       </section>
 
       <section class="card">
@@ -86,7 +117,7 @@
             <span class="hint">По умолчанию 24 часа. Для CF и AtCoder применяется один срок.</span>
           </label>
           <label class="field">
-            <span class="field-label">Срок жизни истории посылок</span>
+            <span class="field-label">Срок жизни кэша посылок</span>
             <span class="control">
               <input id="statusTtlMinutes" name="statusTtlMinutes" type="number" min="5" max="240" step="5" inputmode="numeric">
               <span class="unit">мин</span>
@@ -170,7 +201,9 @@
       <section class="card about">
         <h2>О расширении</h2>
         <p>
-          CF Stats+ берёт публичные данные через официальный
+          CF Stats+ читает страницы посылок на <code>codeforces.com</code> с cookies текущей
+          сессии (same-origin), поэтому видит в том числе закрытые группы. Архивы задач
+          загружаются через официальный
           <a href="https://codeforces.com/apiHelp" target="_blank" rel="noopener noreferrer">Codeforces API</a>
           и открытый архив
           <a href="https://kenkoooo.com/atcoder/" target="_blank" rel="noopener noreferrer">AtCoder Problems</a>.
@@ -178,11 +211,11 @@
         </p>
         <p>
           Разрешения: <code>storage</code> — локальный кэш; <code>unlimitedStorage</code> — архивы задач;
-          доступ к <code>codeforces.com</code> и <code>kenkoooo.com</code> — только для чтения JSON.
-          Графики рисует локально встроенный Chart.js, удалённые скрипты не загружаются.
+          доступ к <code>codeforces.com</code> и <code>kenkoooo.com</code> — для чтения HTML-посылок
+          и JSON-архивов. Графики рисует локально встроенный Chart.js, удалённые скрипты не загружаются.
         </p>
         <div class="about-footer">
-          <span>Версия <span id="version-text">1.0.0</span> · Manifest V3</span>
+          <span>Версия <span id="version-text">2.0.0</span> · Manifest V3</span>
           <span>Chrome / Firefox</span>
         </div>
       </section>
